@@ -1,6 +1,6 @@
 {
 	"name": "@jobmatchme/bee-gate",
-	"version": "0.1.6",
+	"version": "0.1.7",
 	"description": "Transport-neutral gateway runtime for the Bee Dance protocol",
 	"type": "module",
 	"main": "./dist/index.js",
