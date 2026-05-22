@@ -2,6 +2,14 @@ export class ConversationQueue {
 	private processing = false;
 	private queue: Array<() => Promise<void>> = [];
 
+	get isProcessing(): boolean {
+		return this.processing;
+	}
+
+	get length(): number {
+		return this.queue.length;
+	}
+
 	enqueue(work: () => Promise<void>): void {
 		this.queue.push(work);
 		void this.processNext();
