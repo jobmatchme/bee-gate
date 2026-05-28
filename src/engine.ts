@@ -2,6 +2,7 @@ import type { ItemPart } from "@jobmatchme/bee-dance-core";
 import { ConversationQueue } from "./queue.js";
 import { newTurnId } from "./session.js";
 import type {
+	ArtifactRef,
 	BeeResolvedTurn,
 	BeeRunEvent,
 	BeeTurnRequest,
@@ -165,6 +166,27 @@ export class BeeGatewayEngine<MessageRef = string> {
 			const text = renderParts(payload.item.parts);
 			itemTexts.set(payload.item.id, text);
 			if (payload.item.kind === "artifact") {
+				const artifact = firstArtifactRef(payload.item.parts);
+				if (artifact && this.options.sink.publishArtifact) {
+					if (!artifactHasPayload(artifact)) {
+						const messageText = "artifact reference has neither inline URI nor blob key";
+						this.options.logger?.warn?.(`Bee artifact publish skipped: ${messageText}`);
+						await this.options.sink.postMessage(input.output, `${text}\n_Artifact upload skipped: ${messageText}_`);
+						return;
+					}
+					try {
+						await this.options.sink.publishArtifact(input.output, artifact);
+						return;
+					} catch (error) {
+						const messageText = error instanceof Error ? error.message : String(error);
+						this.options.logger?.warn?.(`Bee artifact publish failed: ${messageText}`);
+						await this.options.sink.postMessage(
+							input.output,
+							`${text}\n_Artifact upload failed: ${messageText}_`,
+						);
+						return;
+					}
+				}
 				await this.options.sink.postMessage(input.output, text);
 				return;
 			}
@@ -191,6 +213,25 @@ export class BeeGatewayEngine<MessageRef = string> {
 			}
 		}
 	}
+}
+
+function firstArtifactRef(parts: ItemPart[]): ArtifactRef | undefined {
+	const part = parts.find((entry) => entry.kind === "artifactRef");
+	if (!part || part.kind !== "artifactRef") return undefined;
+	const legacyPart = part as typeof part & { blobKey?: string };
+	return {
+		artifactId: part.artifactId,
+		blobKey: legacyPart.blobKey,
+		name: part.name,
+		title: part.title,
+		mimeType: part.mimeType,
+		uri: part.uri,
+		sizeBytes: part.sizeBytes,
+	};
+}
+
+function artifactHasPayload(artifact: ArtifactRef): boolean {
+	return !!(artifact.uri || artifact.blobKey);
 }
 
 function renderParts(parts: ItemPart[]): string {

@@ -20,10 +20,11 @@ export interface AttachmentRef {
 
 export interface ArtifactRef {
 	artifactId: string;
-	blobKey: string;
+	blobKey?: string;
 	name?: string;
 	title?: string;
 	mimeType?: string;
+	uri?: string;
 	sizeBytes?: number;
 }
 
