@@ -54,6 +54,47 @@ Applications usually pair this package with:
 - a chat or UI adapter that maps user messages into the gateway contract
 - a transport sink that knows how to post and update messages in the target UI
 
+## Optional streaming lifecycle
+
+Adapters can opt a resolved turn into richer run delivery without introducing
+transport-specific types into the gateway:
+
+```ts
+const turn: BeeResolvedTurn = {
+  // normal turn fields...
+  streaming: {
+    enabled: true,
+    routeId: "pilot-route",
+    presentation: "timeline",
+    context: { recipientUserId: "U123", recipientTeamId: "T123" },
+  },
+};
+```
+
+A transport that supports this preference implements all three optional sink
+methods: `startStream`, `updateStream`, and `stopStream`. Existing sinks remain
+Transports may additionally implement `prepareStreamText` so native limits are
+applied consistently to stream completion and normal fallback delivery.
+valid and use the legacy `postMessage`/`updateMessage` flow. Stream start
+failure also locks that run to legacy delivery. An action update failure moves
+the run to degraded delivery: no more action updates are attempted, the stream
+is closed best effort with a short generic notice, and the final answer is
+posted exactly once as a normal message. A stop failure likewise falls back to
+a normal final message.
+
+Bee Dance `action` items are converted to transport-neutral `ActionUpdate`
+values. The item id is the action id; ordered text parts provide the title and
+optional details; and the last recognized status part (`in_progress`,
+`complete`, or `error`) is authoritative. Updates append a new status to the
+same item. Duplicate states and regressions from a terminal state back to
+`in_progress` are ignored; a later terminal state replaces an earlier one.
+Action items are never rendered as normal answer text. Status updates received
+before their action metadata are buffered and merged when the item arrives.
+
+The gateway keeps stream calls serialized with the worker event stream.
+Streaming delivery state is run-scoped and intentionally not persisted across
+process restarts.
+
 ## Publishing
 
 The package is intended for public npm publication from GitHub Actions using npm
