@@ -48,10 +48,46 @@ export interface TransportOutputTarget {
 	threadId?: string;
 }
 
-export interface TransportSink<MessageRef = string> {
+export type DeliveryMode = "legacy" | "streaming" | "degraded";
+
+export type ActionStatus = "in_progress" | "complete" | "error";
+
+/** Transport-neutral representation of one action item's latest state. */
+export interface ActionUpdate {
+	id: string;
+	title: string;
+	details?: string;
+	status: ActionStatus;
+}
+
+export interface TransportStreamStart {
+	runId: string;
+	routeId?: string;
+	presentation?: string;
+	context?: Record<string, unknown>;
+}
+
+export interface TransportStreamResult {
+	text: string;
+	outcome: "complete" | "error";
+}
+
+export interface TransportStreamingPreference {
+	enabled: boolean;
+	routeId?: string;
+	presentation?: string;
+	context?: Record<string, unknown>;
+}
+
+export interface TransportSink<MessageRef = string, StreamRef = MessageRef> {
 	postMessage(target: TransportOutputTarget, text: string): Promise<MessageRef>;
 	updateMessage(target: TransportOutputTarget, ref: MessageRef, text: string): Promise<void>;
 	publishArtifact?(target: TransportOutputTarget, artifact: ArtifactRef): Promise<void>;
+	startStream?(target: TransportOutputTarget, start: TransportStreamStart): Promise<StreamRef>;
+	updateStream?(target: TransportOutputTarget, ref: StreamRef, action: ActionUpdate): Promise<void>;
+	stopStream?(target: TransportOutputTarget, ref: StreamRef, result: TransportStreamResult): Promise<void>;
+	/** Applies transport limits consistently to native and fallback final delivery. */
+	prepareStreamText?(text: string): string;
 }
 
 export interface GateLogger {
@@ -96,6 +132,8 @@ export interface BeeResolvedTurn {
 	actor: GatewayActor;
 	message: GatewayMessage;
 	attachments?: AttachmentRef[];
+	/** Optional transport-neutral request for richer run delivery. */
+	streaming?: TransportStreamingPreference;
 	output: TransportOutputTarget;
 }
 
