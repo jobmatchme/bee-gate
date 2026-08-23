@@ -1,4 +1,5 @@
 import type { ItemPart } from "@jobmatchme/bee-dance-core";
+import { context, propagation, SpanStatusCode, trace } from "@opentelemetry/api";
 import { ConversationQueue } from "./queue.js";
 import { newTurnId } from "./session.js";
 import type {
@@ -17,6 +18,8 @@ import type {
 } from "./types.js";
 
 const DEGRADED_STREAM_NOTICE = "_Live updates ended. The final response follows separately._";
+
+const tracer = trace.getTracer("bee-gate");
 
 interface ActiveTurn {
 	turnId: string;
@@ -66,7 +69,22 @@ export class BeeGatewayEngine<MessageRef = string, StreamRef = MessageRef> {
 
 	dispatch(input: BeeResolvedTurn): void {
 		this.getQueue(input.sessionId).enqueue(async () => {
-			await this.process(input);
+			await tracer.startActiveSpan(
+				"bee.turn",
+				{
+					attributes: {
+						"bee.session.id": input.sessionId,
+						"bee.transport": input.conversation.transport,
+					},
+				},
+				async (span) => {
+					try {
+						await this.process(input);
+					} finally {
+						span.end();
+					}
+				},
+			);
 		});
 	}
 
@@ -134,6 +152,7 @@ export class BeeGatewayEngine<MessageRef = string, StreamRef = MessageRef> {
 			}
 		} catch (error) {
 			const messageText = error instanceof Error ? error.message : String(error);
+			trace.getSpan(context.active())?.setStatus({ code: SpanStatusCode.ERROR, message: messageText });
 			if (!state.terminal) {
 				const userText = controller.signal.aborted
 					? "_Run stopped before a final response._"
@@ -160,6 +179,8 @@ export class BeeGatewayEngine<MessageRef = string, StreamRef = MessageRef> {
 	}
 
 	private buildRequest(input: BeeResolvedTurn, turnId: string): BeeTurnRequest {
+		const telemetry = { ...input.telemetry };
+		propagation.inject(context.active(), telemetry);
 		return {
 			sessionId: input.sessionId,
 			threadId: input.threadId,
@@ -168,6 +189,7 @@ export class BeeGatewayEngine<MessageRef = string, StreamRef = MessageRef> {
 			actor: input.actor,
 			message: input.message,
 			attachments: input.attachments,
+			telemetry,
 		};
 	}
 

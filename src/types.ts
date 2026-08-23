@@ -124,6 +124,12 @@ export interface BlobStore {
 	materialize(ref: AttachmentRef | ArtifactRef): Promise<BlobMaterializedFile>;
 }
 
+export interface BeeTelemetryCarrier {
+	traceparent?: string;
+	tracestate?: string;
+	baggage?: string;
+}
+
 export interface BeeResolvedTurn {
 	sessionId: string;
 	threadId?: string;
@@ -135,6 +141,7 @@ export interface BeeResolvedTurn {
 	/** Optional transport-neutral request for richer run delivery. */
 	streaming?: TransportStreamingPreference;
 	output: TransportOutputTarget;
+	telemetry?: BeeTelemetryCarrier;
 }
 
 export interface BeeTurnRequest {
@@ -145,6 +152,7 @@ export interface BeeTurnRequest {
 	actor: GatewayActor;
 	message: GatewayMessage;
 	attachments?: AttachmentRef[];
+	telemetry?: BeeTelemetryCarrier;
 }
 
 export type BeeRunEvent = Envelope<

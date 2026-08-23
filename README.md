@@ -95,6 +95,12 @@ The gateway keeps stream calls serialized with the worker event stream.
 Streaming delivery state is run-scoped and intentionally not persisted across
 process restarts.
 
+## Trace context propagation
+
+`BeeGatewayEngine` creates a `bee.turn` span when an OpenTelemetry provider is registered. W3C `traceparent`, `tracestate`, and `baggage` are injected into `turn.start.payload.hints.telemetry`; the NATS and Unix-socket transports can preserve these extension hints without a Bee Dance schema change. Callers that already have a carrier can provide it as `BeeResolvedTurn.telemetry` or `BeeTurnRequest.telemetry`.
+
+The instrumentation records transport and correlation identifiers only. Message content, actors, attachments, and tool data are not span attributes.
+
 ## Publishing
 
 The package is intended for public npm publication from GitHub Actions using npm
