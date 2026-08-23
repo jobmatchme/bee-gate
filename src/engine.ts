@@ -1,5 +1,5 @@
 import type { ItemPart } from "@jobmatchme/bee-dance-core";
-import { context, propagation, SpanStatusCode, trace } from "@opentelemetry/api";
+import { context, propagation, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { ConversationQueue } from "./queue.js";
 import { newTurnId } from "./session.js";
 import type {
@@ -138,18 +138,38 @@ export class BeeGatewayEngine<MessageRef = string, StreamRef = MessageRef> {
 		});
 
 		try {
-			const request = this.buildRequest(input, turnId);
-			await this.options.workerClient.streamTurn(
-				input.worker,
-				request,
-				async (event) => {
-					await this.handleEvent(input, turnId, event, state);
+			await tracer.startActiveSpan(
+				"bee.worker.request",
+				{
+					kind: SpanKind.CLIENT,
+					attributes: {
+						"bee.session.id": input.sessionId,
+						"bee.transport": "nats",
+					},
 				},
-				{ signal: controller.signal },
+				async (span) => {
+					try {
+						const request = this.buildRequest(input, turnId);
+						await this.options.workerClient.streamTurn(
+							input.worker,
+							request,
+							async (event) => {
+								await this.handleEvent(input, turnId, event, state);
+							},
+							{ signal: controller.signal },
+						);
+						if (controller.signal.aborted && !state.terminal) {
+							await this.failRun(input, turnId, state, "_Run stopped before a final response._", "aborted");
+						}
+					} catch (error) {
+						const messageText = error instanceof Error ? error.message : String(error);
+						span.setStatus({ code: SpanStatusCode.ERROR, message: messageText });
+						throw error;
+					} finally {
+						span.end();
+					}
+				},
 			);
-			if (controller.signal.aborted && !state.terminal) {
-				await this.failRun(input, turnId, state, "_Run stopped before a final response._", "aborted");
-			}
 		} catch (error) {
 			const messageText = error instanceof Error ? error.message : String(error);
 			trace.getSpan(context.active())?.setStatus({ code: SpanStatusCode.ERROR, message: messageText });
