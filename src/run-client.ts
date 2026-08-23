@@ -67,6 +67,31 @@ export function buildBeeSubjects(target: BeeWorkerTargetConfig, sessionId: strin
 	};
 }
 
+export function createBeeTurnStartEnvelope(
+	target: BeeWorkerTargetConfig,
+	request: BeeTurnRequest,
+	gatewayActor: GatewayActor = { userId: "gateway:bee-gate", displayName: "bee-gate" },
+): Envelope {
+	return createTurnStart({
+		sessionId: request.sessionId,
+		threadId: request.threadId,
+		turnId: request.turnId,
+		from: toActorRef(gatewayActor),
+		to: { kind: "agent", id: target.subject },
+		replyTo: null,
+		payload: {
+			input: [{ kind: "text", text: request.message.text }],
+			hints: {
+				conversationId: request.conversation.conversationId,
+				attachments: request.attachments || [],
+				actor: request.actor,
+				transport: request.conversation.transport,
+				telemetry: request.telemetry,
+			},
+		},
+	});
+}
+
 export class NatsBeeClient implements BeeWorkerClient {
 	private gatewayActor: GatewayActor = {
 		userId: "gateway:bee-gate",
@@ -125,24 +150,7 @@ export class NatsBeeClient implements BeeWorkerClient {
 		try {
 			this.connection.publish(
 				subjects.command,
-				codec.encode(
-					createTurnStart({
-						sessionId: request.sessionId,
-						threadId: request.threadId,
-						turnId: request.turnId,
-						from: toActorRef(this.gatewayActor),
-						to: { kind: "agent", id: target.subject },
-						replyTo: null,
-						payload: {
-							input: [{ kind: "text", text: request.message.text }],
-							hints: {
-								conversationId: request.conversation.conversationId,
-								attachments: request.attachments || [],
-								actor: request.actor,
-							},
-						},
-					}),
-				),
+				codec.encode(createBeeTurnStartEnvelope(target, request, this.gatewayActor)),
 			);
 			scheduleEventTimeout("start");
 

@@ -45,6 +45,7 @@
 	},
 	"dependencies": {
 		"@jobmatchme/bee-dance-core": "0.1.5",
+		"@opentelemetry/api": "^1.9.1",
 		"nats": "^2.29.3"
 	},
 	"devDependencies": {
