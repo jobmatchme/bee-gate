@@ -39,6 +39,7 @@ const DEFAULT_CAPABILITIES: ProtocolCapabilities = {
 export interface NatsConnectionOptions {
 	servers: string | string[];
 	name?: string;
+	maxReconnectAttempts?: number;
 }
 
 export interface BeeSubjectSet {
@@ -197,7 +198,11 @@ export class NatsBeeClient implements BeeWorkerClient {
 	}
 
 	async close(): Promise<void> {
-		await this.connection.drain();
+		try {
+			await this.connection.drain();
+		} finally {
+			await this.connection.close();
+		}
 	}
 
 	private async performHandshake(
@@ -276,6 +281,7 @@ export async function createNatsBeeClient(options: NatsConnectionOptions): Promi
 	const connection = await connect({
 		servers: options.servers,
 		name: options.name,
+		maxReconnectAttempts: options.maxReconnectAttempts ?? -1,
 	});
 	return new NatsBeeClient(connection);
 }
