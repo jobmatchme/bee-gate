@@ -1,5 +1,64 @@
-import { describe, expect, it } from "vitest";
-import { createBeeTurnStartEnvelope } from "../src/run-client.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { closeMock, connectMock, drainMock } = vi.hoisted(() => {
+	const drainMock = vi.fn(async () => undefined);
+	const closeMock = vi.fn(async () => undefined);
+	return {
+		drainMock,
+		closeMock,
+		connectMock: vi.fn(async () => ({ drain: drainMock, close: closeMock })),
+	};
+});
+
+vi.mock("nats", async (importOriginal) => ({
+	...(await importOriginal<typeof import("nats")>()),
+	connect: connectMock,
+}));
+
+import { createBeeTurnStartEnvelope, createNatsBeeClient } from "../src/run-client.js";
+
+describe("createNatsBeeClient", () => {
+	beforeEach(() => {
+		connectMock.mockClear();
+		drainMock.mockReset().mockResolvedValue(undefined);
+		closeMock.mockReset().mockResolvedValue(undefined);
+	});
+
+	it("reconnects indefinitely by default", async () => {
+		await createNatsBeeClient({
+			servers: "nats://localhost:4222",
+			name: "bee-slack",
+		});
+
+		expect(connectMock).toHaveBeenLastCalledWith({
+			servers: "nats://localhost:4222",
+			name: "bee-slack",
+			maxReconnectAttempts: -1,
+		});
+	});
+
+	it("preserves an explicit reconnect limit, including zero", async () => {
+		await createNatsBeeClient({
+			servers: ["nats://one:4222", "nats://two:4222"],
+			maxReconnectAttempts: 0,
+		});
+
+		expect(connectMock).toHaveBeenLastCalledWith({
+			servers: ["nats://one:4222", "nats://two:4222"],
+			name: undefined,
+			maxReconnectAttempts: 0,
+		});
+	});
+
+	it("force-closes the connection when graceful drain fails", async () => {
+		const drainError = new Error("disconnected during drain");
+		drainMock.mockRejectedValueOnce(drainError);
+		const client = await createNatsBeeClient({ servers: "nats://localhost:4222" });
+
+		await expect(client.close()).rejects.toBe(drainError);
+		expect(closeMock).toHaveBeenCalledOnce();
+	});
+});
 
 describe("createBeeTurnStartEnvelope", () => {
 	it("preserves transport and W3C telemetry hints", () => {
